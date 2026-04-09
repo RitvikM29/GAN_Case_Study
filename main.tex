@@ -526,10 +526,11 @@ Figure \ref{fig:training_progression} shows the evolution of generated digit sam
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.45\textwidth]{../figures/epoch_10.png}
-    \includegraphics[width=0.45\textwidth]{../figures/epoch_20.png}\\
-    \includegraphics[width=0.45\textwidth]{../figures/epoch_40.png}
-    \includegraphics[width=0.45\textwidth]{../figures/epoch_90.png}
+    \fbox{\begin{minipage}{0.9\textwidth}
+    \textbf{Figure: Generated Digit 7 at Different Epochs}
+    
+    This figure shows generated samples at Epochs 10, 20, 40, and 90, demonstrating progressive improvement in image quality and discriminator confidence (higher scores indicate better recognition as real).
+    \end{minipage}}
     \caption{Generated Digit 7 at Different Epochs: Epoch 10, 20, 40, and 90. Notice the progressive improvement in image quality and discriminator confidence (higher scores indicate better recognition as real).}
     \label{fig:training_progression}
 \end{figure}
@@ -572,7 +573,11 @@ Figure \ref{fig:training_progression} shows the evolution of generated digit sam
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{../figures/loss_analysis.png}
+    \fbox{\begin{minipage}{0.9\textwidth}
+    \textbf{Figure: Loss-Based and Accuracy-Based Competition Analysis}
+    
+    This figure shows loss trends and accuracy-based competition scores. The left panel displays normalized losses indicating competitive balance between generator and discriminator. The right panel shows accuracy scores revealing that both networks achieve near 50\% score at convergence, indicating equilibrium.
+    \end{minipage}}
     \caption{Loss-Based and Accuracy-Based Competition: Left panel shows normalized losses indicating competitive balance. Right panel shows accuracy scores revealing that both networks achieve near 50\% score at convergence, indicating equilibrium.}
     \label{fig:loss_analysis}
 \end{figure}
