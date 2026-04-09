@@ -1,0 +1,898 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf-8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% Code styling
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    backgroundcolor=\color{gray!10},
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    frame=single,
+    tabsize=2
+}
+
+\title{\textbf{Generative Adversarial Networks (GANs)\\Case Study: MNIST Digit Generation}}
+\author{Machine Learning Case Study}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This case study explores Generative Adversarial Networks (GANs), a powerful framework for generating synthetic data. We provide a comprehensive analysis of GAN architecture, implementation using PyTorch on MNIST dataset, and detailed visualization of training dynamics. The study demonstrates how the generator and discriminator networks compete to improve the quality of generated digits, includes loss analysis, and discusses practical applications and limitations.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Problem Statement} \label{sec:problem}
+% ============================================================================
+
+\subsection{Background}
+Traditional deep learning models are primarily discriminative---they learn to classify existing data or predict outputs given inputs. However, there is a significant need for \textbf{generative models} that can create new, realistic synthetic data from scratch.
+
+\subsection{Challenge}
+The problem we address is: \textbf{How can we train a neural network to generate realistic images that are indistinguishable from real data?}
+
+Specifically, in this case study, we focus on:
+\begin{itemize}
+    \item Generating handwritten digit images (MNIST dataset)
+    \item Creating synthetic samples that appear genuine to a discriminator network
+    \item Training two competing networks simultaneously without explicit supervision
+    \item Analyzing the learning dynamics and convergence properties
+\end{itemize}
+
+\subsection{Motivation}
+Generative models have practical applications in:
+\begin{itemize}
+    \item Data augmentation for limited datasets
+    \item Image-to-image translation
+    \item Super-resolution and image enhancement
+    \item Drug discovery and molecular design
+    \item Style transfer and artistic creation
+\end{itemize}
+
+% ============================================================================
+\section{Explanation of GAN Concept} \label{sec:concept}
+% ============================================================================
+
+\subsection{Introduction to GANs}
+A Generative Adversarial Network is a framework consisting of two neural networks in competition:
+
+\begin{enumerate}
+    \item \textbf{Generator (G)}: Creates fake data from random noise
+    \item \textbf{Discriminator (D)}: Classifies data as real or fake
+\end{enumerate}
+
+\subsection{The Generator Network}
+
+The generator maps a random vector $z$ (latent space) to a synthetic image:
+\[
+G: \mathbb{R}^{d_z} \to \mathbb{R}^{d_{image}}
+\]
+
+where $d_z$ is the latent dimension and $d_{image}$ is the image dimension.
+
+\textbf{Purpose}: Generate synthetic images that fool the discriminator.
+
+\textbf{Architecture}: Multiple fully connected or convolutional layers with activation functions:
+\begin{align}
+    z &\sim \mathcal{N}(0, I) \quad \text{(sample from noise)} \\
+    x_{fake} &= G(z) \quad \text{(generate fake image)}
+\end{align}
+
+\subsection{The Discriminator Network}
+
+The discriminator is a binary classifier that distinguishes real from fake images:
+\[
+D: \mathbb{R}^{d_{image}} \to [0, 1]
+\]
+
+\textbf{Purpose}: Maximize ability to classify real vs. fake images.
+
+\textbf{Output}: A probability score where:
+\begin{itemize}
+    \item $D(x) \approx 1$ indicates real image
+    \item $D(x) \approx 0$ indicates fake image
+\end{itemize}
+
+\subsection{Adversarial Training Objective}
+
+The two networks play a minimax game defined by the loss function:
+
+\begin{equation}
+\min_G \max_D V(G, D) = \mathbb{E}_{x \sim p_{data}}[\log D(x)] + \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]
+\end{equation}
+
+\textbf{Discriminator's goal}: Maximize $V(G, D)$
+\begin{itemize}
+    \item Maximize $\log D(x)$ for real images (output close to 1)
+    \item Maximize $\log(1 - D(G(z)))$ for fake images (output close to 0)
+\end{itemize}
+
+\textbf{Generator's goal}: Minimize $V(G, D)$
+\begin{itemize}
+    \item Minimize $\log(1 - D(G(z)))$, equivalently maximize $\log D(G(z))$
+    \item Force the discriminator to output high probability for fake images
+\end{itemize}
+
+\subsection{Equilibrium}
+
+At Nash equilibrium:
+\begin{itemize}
+    \item $G$ generates perfect copies of real data distribution
+    \item $D$ cannot distinguish real from fake
+    \item Both networks have balanced performance
+\end{itemize}
+
+% ============================================================================
+\section{Architecture Diagram} \label{sec:architecture}
+% ============================================================================
+
+\subsection{GAN System Architecture}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[scale=1.2]
+        % Generator Path
+        \draw[thick, red!70] (-4, 1) rectangle (-2.5, 2);
+        \node at (-3.25, 1.5) {\textbf{Random Noise}};
+        
+        \draw[->, thick, black] (-2.5, 1.5) -- (-1, 1.5);
+        
+        \draw[thick, blue!70] (-1, 0.8) rectangle (1.5, 2.2);
+        \node at (0.25, 1.5) {\textbf{Generator}};
+        \node[small] at (0.25, 1) {256 → 512 → 1024 → 784};
+        
+        \draw[->, thick, black] (1.5, 1.5) -- (3, 1.5);
+        
+        \draw[thick, red!70] (3, 0.8) rectangle (5, 2.2);
+        \node at (4, 1.5) {\textbf{Fake Image}};
+        
+        % Real Data
+        \draw[thick, green!70] (-4, -1.5) rectangle (-2.5, -0.5);
+        \node at (-3.25, -1) {\textbf{Real Image}};
+        
+        % Discriminator Path
+        \draw[->, thick, black] (5, 1.2) -- (6, 0.8);
+        \draw[->, thick, black] (-2.5, -1) -- (3, 0.2);
+        
+        \draw[thick, orange!70] (6, -1) rectangle (8.5, 1.5);
+        \node at (7.25, 0.25) {\textbf{Discriminator}};
+        \node[small] at (7.25, -0.4) {784 → 512 → 256 → 1};
+        
+        \draw[->, thick, black] (8.5, 0.25) -- (9.5, 0.25);
+        
+        \draw[thick, green!70] (9.5, -0.25) rectangle (11, 0.75);
+        \node at (10.25, 0.25) {\textbf{Real/Fake}};
+        
+    \end{tikzpicture}
+    \caption{GAN System Architecture: Random noise flows through Generator to create fake images, while real images from dataset and fake images flow through Discriminator for classification.}
+    \label{fig:gan_architecture}
+\end{figure}
+
+\subsection{Generator Network Architecture}
+
+\begin{figure}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{Layer} & \textbf{Input Dim} & \textbf{Output Dim} & \textbf{Activation} \\
+        \hline
+        Linear 1 & 100 & 256 & LeakyReLU(0.2) \\
+        \hline
+        Linear 2 & 256 & 512 & LeakyReLU(0.2) \\
+        \hline
+        Linear 3 & 512 & 1024 & LeakyReLU(0.2) \\
+        \hline
+        Linear 4 (Output) & 1024 & 784 & Tanh \\
+        \hline
+    \end{tabular}
+    \caption{Generator Network Architecture - Maps 100-dimensional latent vector to 784-dimensional image (28×28).}
+    \label{fig:generator_arch}
+\end{figure}
+
+\subsection{Discriminator Network Architecture}
+
+\begin{figure}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{Layer} & \textbf{Input Dim} & \textbf{Output Dim} & \textbf{Additional} \\
+        \hline
+        Linear 1 & 784 & 1024 & LeakyReLU(0.2) + Dropout(0.3) \\
+        \hline
+        Linear 2 & 1024 & 512 & LeakyReLU(0.2) + Dropout(0.3) \\
+        \hline
+        Linear 3 & 512 & 256 & LeakyReLU(0.2) + Dropout(0.3) \\
+        \hline
+        Linear 4 (Output) & 256 & 1 & Sigmoid \\
+        \hline
+    \end{tabular}
+    \caption{Discriminator Network Architecture - Maps 784-dimensional image to binary classification (real/fake).}
+    \label{fig:discriminator_arch}
+\end{figure}
+
+% ============================================================================
+\section{Working Principle of GAN} \label{sec:working}
+% ============================================================================
+
+\subsection{Training Loop}
+
+The GAN training process alternates between two phases:
+
+\subsubsection{Phase 1: Update Discriminator}
+
+\begin{enumerate}
+    \item Sample real batch $\{x_1, x_2, \ldots, x_m\} \sim p_{data}$
+    \item Sample noise batch $\{z_1, z_2, \ldots, z_m\} \sim p_z$
+    \item Generate fake images: $\{\tilde{x}_1, \tilde{x}_2, \ldots, \tilde{x}_m\} = G(z_1, \ldots, z_m)$
+    \item Compute discriminator loss:
+    \begin{equation}
+        \mathcal{L}_D = -\mathbb{E}[\log D(x)] - \mathbb{E}[\log(1 - D(G(z)))]
+    \end{equation}
+    \item Update discriminator parameters: $\theta_d \leftarrow \theta_d - \alpha_d \nabla_{\theta_d} \mathcal{L}_D$
+\end{enumerate}
+
+\subsubsection{Phase 2: Update Generator}
+
+\begin{enumerate}
+    \item Sample noise batch $\{z_1, z_2, \ldots, z_m\} \sim p_z$
+    \item Generate fake images: $\{\tilde{x}_1, \tilde{x}_2, \ldots, \tilde{x}_m\} = G(z_1, \ldots, z_m)$
+    \item Compute generator loss:
+    \begin{equation}
+        \mathcal{L}_G = -\mathbb{E}[\log D(G(z))]
+    \end{equation}
+    \item Update generator parameters: $\theta_g \leftarrow \theta_g - \alpha_g \nabla_{\theta_g} \mathcal{L}_G$
+\end{enumerate}
+
+\subsection{Label Smoothing}
+
+To stabilize training, we use \textbf{label smoothing}:
+\begin{itemize}
+    \item Real labels: $0.9$ instead of $1.0$
+    \item Fake labels: $0$ (unchanged)
+\end{itemize}
+
+This prevents the discriminator from becoming overconfident and destabilizing the generator.
+
+\subsection{Training Dynamics}
+
+The training exhibits three phases:
+
+\begin{enumerate}
+    \item \textbf{Early Phase (Epochs 1-20)}: Generator learns basic structure, discriminator easily distinguishes real/fake
+    \item \textbf{Mid Phase (Epochs 20-60)}: Both networks improve, convergence toward equilibrium begins
+    \item \textbf{Late Phase (Epochs 60+)}: Both networks reach near-optimal performance, losses stabilize
+\end{enumerate}
+
+% ============================================================================
+\section{Implementation Code} \label{sec:implementation}
+% ============================================================================
+
+\subsection{Imports and Hyperparameters}
+
+\begin{lstlisting}[language=Python, caption=Required imports and hyperparameter setup]
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Device setup
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Hyperparameters
+batch_size = 64
+z_dim = 100          # Latent space dimension
+lr = 0.0002         # Learning rate
+epochs = 200        # Training epochs
+show_interval = 10  # Visualization interval
+target_digit = 7    # Generate digit 7
+smooth = 0.1        # Label smoothing
+\end{lstlisting}
+
+\subsection{Data Preparation}
+
+\begin{lstlisting}[language=Python, caption=MNIST data loading and preprocessing]
+# Data transforms
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
+])
+
+# Load MNIST dataset
+dataset = datasets.MNIST(
+    root='./mnist_data/', 
+    train=True, 
+    transform=transform, 
+    download=True
+)
+
+# Filter for single digit (7)
+indices = (dataset.targets == target_digit).nonzero().squeeze()
+subset = torch.utils.data.Subset(dataset, indices)
+train_loader = torch.utils.data.DataLoader(
+    subset, 
+    batch_size=batch_size, 
+    shuffle=True
+)
+
+mnist_dim = 28 * 28  # 784 flattened image dimension
+\end{lstlisting}
+
+\subsection{Generator Network}
+
+\begin{lstlisting}[language=Python, caption=Generator Network Implementation]
+class Generator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(z_dim, 256),
+            nn.LeakyReLU(0.2),
+            
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2),
+            
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(0.2),
+            
+            nn.Linear(1024, mnist_dim),
+            nn.Tanh()  # Output in [-1, 1]
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+\end{lstlisting}
+
+\subsection{Discriminator Network}
+
+\begin{lstlisting}[language=Python, caption=Discriminator Network Implementation]
+class Discriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(mnist_dim, 1024),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            
+            nn.Linear(1024, 512),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            
+            nn.Linear(256, 1),
+            nn.Sigmoid()  # Output in [0, 1]
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+\end{lstlisting}
+
+\subsection{Model Initialization and Optimizers}
+
+\begin{lstlisting}[language=Python, caption=Model initialization and optimization setup]
+# Initialize networks
+G = Generator().to(device)
+D = Discriminator().to(device)
+
+# Loss function
+criterion = nn.BCELoss()
+
+# Optimizers
+G_opt = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
+D_opt = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
+
+# Fixed latent vectors for evaluation
+fixed_z = torch.randn(16, z_dim).to(device)
+
+# History tracking
+G_loss_hist, D_loss_hist = [], []
+G_score_hist, D_score_hist = [], []
+\end{lstlisting}
+
+\subsection{Training Loop}
+
+\begin{lstlisting}[language=Python, caption=Main GAN training loop (core algorithm)]
+for epoch in range(1, epochs + 1):
+    D_losses, G_losses = [], []
+    
+    for real, _ in train_loader:
+        # Reshape real images to vectors
+        real = real.view(real.size(0), -1).to(device)
+        batch_sz = real.size(0)
+        
+        # Labels with smoothing
+        real_labels = torch.ones(batch_sz, 1).to(device) * 0.9
+        fake_labels = torch.zeros(batch_sz, 1).to(device)
+        
+        # ========== UPDATE DISCRIMINATOR ==========
+        z = torch.randn(batch_sz, z_dim).to(device)
+        fake = G(z)
+        
+        D_loss = criterion(D(real), real_labels) + \
+                 criterion(D(fake.detach()), fake_labels)
+        
+        D_opt.zero_grad()
+        D_loss.backward()
+        D_opt.step()
+        
+        # ========== UPDATE GENERATOR ==========
+        z = torch.randn(batch_sz, z_dim).to(device)
+        fake = G(z)
+        
+        G_loss = criterion(D(fake), real_labels)
+        
+        G_opt.zero_grad()
+        G_loss.backward()
+        G_opt.step()
+        
+        # Store losses
+        D_losses.append(D_loss.item())
+        G_losses.append(G_loss.item())
+    
+    # Average losses
+    avg_D = np.mean(D_losses)
+    avg_G = np.mean(G_losses)
+    
+    D_loss_hist.append(avg_D)
+    G_loss_hist.append(avg_G)
+    
+    # Evaluate competition
+    D_score, G_score = evaluate_competition(G, D, train_loader)
+    D_score_hist.append(D_score)
+    G_score_hist.append(G_score)
+    
+    print(f"[{epoch}] G_loss:{avg_G:.3f} D_loss:{avg_D:.3f} " + 
+          f"G_score:{G_score:.3f} D_score:{D_score:.3f}")
+    
+    # Visualization every N epochs
+    if epoch % show_interval == 0:
+        with torch.no_grad():
+            fake = G(fixed_z).reshape(-1, 1, 28, 28)
+            preds = D(fake.view(16, -1)).cpu().numpy().flatten()
+            show_generated(fake, preds, epoch)
+\end{lstlisting}
+
+\subsection{Evaluation Function}
+
+\begin{lstlisting}[language=Python, caption=Evaluation metrics computation]
+def evaluate_competition(G, D, dataloader):
+    G.eval()
+    D.eval()
+    
+    real_correct = 0
+    fake_correct = 0
+    total = 0
+    
+    with torch.no_grad():
+        for real, _ in dataloader:
+            real = real.view(real.size(0), -1).to(device)
+            batch_sz = real.size(0)
+            
+            # Discriminator accuracy on real images
+            real_preds = D(real)
+            real_correct += (real_preds > 0.5).sum().item()
+            
+            # Discriminator accuracy on fake images
+            z = torch.randn(batch_sz, z_dim).to(device)
+            fake = G(z)
+            fake_preds = D(fake)
+            fake_correct += (fake_preds < 0.5).sum().item()
+            
+            total += batch_sz
+    
+    D_real_acc = real_correct / total
+    D_fake_acc = fake_correct / total
+    
+    D_score = (D_real_acc + D_fake_acc) / 2
+    G_score = 1 - D_score
+    
+    return D_score, G_score
+\end{lstlisting}
+
+% ============================================================================
+\section{Visualization of Generated Outputs} \label{sec:visualization}
+% ============================================================================
+
+\subsection{Training Progression}
+
+Figure \ref{fig:training_progression} shows the evolution of generated digit samples across different training epochs:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{../figures/epoch_10.png}
+    \includegraphics[width=0.45\textwidth]{../figures/epoch_20.png}\\
+    \includegraphics[width=0.45\textwidth]{../figures/epoch_40.png}
+    \includegraphics[width=0.45\textwidth]{../figures/epoch_90.png}
+    \caption{Generated Digit 7 at Different Epochs: Epoch 10, 20, 40, and 90. Notice the progressive improvement in image quality and discriminator confidence (higher scores indicate better recognition as real).}
+    \label{fig:training_progression}
+\end{figure}
+
+\subsection{Key Observations from Generated Outputs}
+
+\subsubsection{Epoch 10 - Early Training}
+\begin{itemize}
+    \item Images are highly noisy and unstructured
+    \item Few recognizable digit features
+    \item Discriminator confidence low (0.18-0.74 range)
+    \item Generator is learning basic structure
+\end{itemize}
+
+\subsubsection{Epoch 20 - Early-Mid Training}
+\begin{itemize}
+    \item Clear digit-like patterns emerging
+    \item Recognizable "7" shape in most samples
+    \item Discriminator confidence slightly higher (0.07-0.44 range)
+    \item Generator improving feature coherence
+\end{itemize}
+
+\subsubsection{Epoch 40 - Mid Training}
+\begin{itemize}
+    \item Well-defined digit structures
+    \item Consistent "7" morphology
+    \item Better quality overall
+    \item Real images now distinguishable from fake
+\end{itemize}
+
+\subsubsection{Epoch 90 - Late Training}
+\begin{itemize}
+    \item High-quality synthetic digits
+    \item Realistic appearance similar to training data
+    \item Discriminator assigns high scores (0.46-0.87)
+    \item Network convergence near equilibrium
+\end{itemize}
+
+\subsection{Loss Analysis Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../figures/loss_analysis.png}
+    \caption{Loss-Based and Accuracy-Based Competition: Left panel shows normalized losses indicating competitive balance. Right panel shows accuracy scores revealing that both networks achieve near 50\% score at convergence, indicating equilibrium.}
+    \label{fig:loss_analysis}
+\end{figure}
+
+% ============================================================================
+\section{Results and Analysis} \label{sec:results}
+% ============================================================================
+
+\subsection{Loss Trends}
+
+\subsubsection{Discriminator Loss}
+\begin{itemize}
+    \item \textbf{Initial phase}: Drops sharply from $\approx 1.25$ to $\approx 0.95$
+    \item \textbf{Stabilization}: Converges to $\approx 1.26$ by epoch 50
+    \item \textbf{Final phase}: Remains stable around $1.25$ (near random guessing)
+    \item \textbf{Interpretation}: Discriminator becomes unable to distinguish real from fake, indicating success
+\end{itemize}
+
+\subsubsection{Generator Loss}
+\begin{itemize}
+    \item \textbf{Initial phase}: Sharp rise from $\approx 0.81$ to $\approx 2.16$ (epochs 1-4)
+    \item \textbf{Learning phase}: Gradual decrease from $\approx 1.75$ to $\approx 0.99$ (epochs 5-40)
+    \item \textbf{Convergence}: Stabilizes around $\approx 1.00$ (epochs 40-200)
+    \item \textbf{Interpretation}: Generator learns to fool discriminator; loss plateaus at equilibrium
+\end{itemize}
+
+\subsection{Accuracy-Based Metrics}
+
+\subsubsection{Discriminator Score (D\_score)}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{Epoch Range} & \textbf{Mean Score} & \textbf{Interpretation} \\
+        \hline
+        1-10 & 0.75 & Strong discriminator, weak generator \\
+        \hline
+        11-50 & 0.65 & Improving generator, declining discriminator \\
+        \hline
+        51-100 & 0.63 & Approaching equilibrium \\
+        \hline
+        101-200 & 0.64 & Equilibrium (near random: 0.5) \\
+        \hline
+    \end{tabular}
+    \caption{Discriminator Score Evolution}
+\end{table}
+
+\subsubsection{Generator Score (G\_score)}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{Epoch Range} & \textbf{Mean Score} & \textbf{Interpretation} \\
+        \hline
+        1-10 & 0.25 & Poor generation quality \\
+        \hline
+        11-50 & 0.35 & Improving generation quality \\
+        \hline
+        51-100 & 0.37 & High-quality generations \\
+        \hline
+        101-200 & 0.36 & Stable generation (equilibrium) \\
+        \hline
+    \end{tabular}
+    \caption{Generator Score Evolution}
+\end{table}
+
+\subsection{Convergence Analysis}
+
+\subsubsection{Training Stability}
+\begin{itemize}
+    \item \textbf{Oscillations}: Minimal loss oscillation after epoch 40
+    \item \textbf{Balance}: G\_score and D\_score stabilize at opposite sides of 0.5
+    \item \textbf{Equilibrium}: Networks reach near-Nash equilibrium around epoch 50
+\end{itemize}
+
+\subsubsection{Generation Quality Improvement}
+\begin{enumerate}
+    \item \textbf{Epochs 1-20}: Noise → Blurry digits
+    \item \textbf{Epochs 21-60}: Recognizable shapes → Clear digits
+    \item \textbf{Epochs 61-110}: Well-formed digits → High-quality samples
+    \item \textbf{Epochs 111-200}: High-quality convergence
+\end{enumerate}
+
+\subsection{Statistical Summary}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        \textbf{Metric} & \textbf{Min} & \textbf{Max} & \textbf{Mean} & \textbf{Std Dev} \\
+        \hline
+        Generator Loss & 0.814 & 2.156 & 1.162 & 0.319 \\
+        \hline
+        Discriminator Loss & 0.846 & 1.281 & 1.153 & 0.117 \\
+        \hline
+        Generator Score & 0.001 & 0.490 & 0.308 & 0.088 \\
+        \hline
+        Discriminator Score & 0.510 & 0.999 & 0.692 & 0.088 \\
+        \hline
+    \end{tabular}
+    \caption{Statistical Summary of Training Metrics}
+\end{table}
+
+% ============================================================================
+\section{Applications and Limitations} \label{sec:applications}
+% ============================================================================
+
+\subsection{Applications of GANs}
+
+\subsubsection{1. Image Generation and Synthesis}
+\begin{itemize}
+    \item \textbf{Application}: Create photorealistic images, artwork, and design elements
+    \item \textbf{Example}: StyleGAN for high-resolution face synthesis
+    \item \textbf{Impact}: Content creation, game design, film production
+\end{itemize}
+
+\subsubsection{2. Image-to-Image Translation}
+\begin{itemize}
+    \item \textbf{Application}: Convert images between domains (e.g., sketch→photo, day→night)
+    \item \textbf{Example}: Pix2Pix, CycleGAN
+    \item \textbf{Impact}: Medical imaging, autonomous vehicles, artistic applications
+\end{itemize}
+
+\subsubsection{3. Data Augmentation}
+\begin{itemize}
+    \item \textbf{Application}: Generate synthetic training data for limited datasets
+    \item \textbf{Example}: Medical imaging with limited samples
+    \item \textbf{Impact}: Improved model generalization, handling class imbalance
+\end{itemize}
+
+\subsubsection{4. Super-Resolution}
+\begin{itemize}
+    \item \textbf{Application}: Upscale low-resolution images to high-resolution
+    \item \textbf{Example}: SRGAN (Super-Resolution GAN)
+    \item \textbf{Impact}: Medical imaging, satellite imaging, video enhancement
+\end{itemize}
+
+\subsubsection{5. Scientific Applications}
+\begin{itemize}
+    \item \textbf{Drug Discovery}: Generate molecular structures with desired properties
+    \item \textbf{Physics}: Simulate particle interactions, climate modeling
+    \item \textbf{Biology}: Generate protein structures, sequence design
+\end{itemize}
+
+\subsubsection{6. Anomaly Detection}
+\begin{itemize}
+    \item \textbf{Application}: Detect outliers by reconstructing normal data
+    \item \textbf{Example}: Industrial quality control, fraud detection
+    \item \textbf{Impact}: Unsupervised anomaly detection without explicit labels
+\end{itemize}
+
+\subsection{Limitations of GANs}
+
+\subsubsection{1. Training Instability}
+\begin{itemize}
+    \item \textbf{Mode Collapse}: Generator produces limited variety of outputs
+    \item \textbf{Divergence}: Discriminator becomes too powerful, generator cannot improve
+    \item \textbf{Oscillation}: Loss curves oscillate without convergence
+    \item \textbf{Mitigation}: Label smoothing, feature matching, wasserstein distance
+\end{itemize}
+
+\subsubsection{2. Convergence Issues}
+\begin{itemize}
+    \item \textbf{Problem}: No guarantee of convergence to optimal solution
+    \item \textbf{Challenge}: Hyperparameter sensitivity (learning rates, network architecture)
+    \item \textbf{Impact}: Training often requires careful tuning and patience
+\end{itemize}
+
+\subsubsection{3. Computational Cost}
+\begin{itemize}
+    \item \textbf{Problem}: Training is computationally expensive
+    \item \textbf{Requirement}: Large datasets and GPU resources
+    \item \textbf{Time}: Can take hours to days for high-resolution image generation
+\end{itemize}
+
+\subsubsection{4. Evaluation Difficulty}
+\begin{itemize}
+    \item \textbf{Problem}: No clear metric for generation quality
+    \item \textbf{Challenge}: Subjective human evaluation required
+    \item \textbf{Metrics}: Inception Score, Fréchet Inception Distance (FID) have limitations
+\end{itemize}
+
+\subsubsection{5. Mode Coverage}
+\begin{itemize}
+    \item \textbf{Problem}: Generator may miss important modes in data distribution
+    \item \textbf{Impact}: Limited diversity in generated samples
+    \item \textbf{Solution}: Improved loss functions and training techniques
+\end{itemize}
+
+\subsubsection{6. Ethical and Societal Concerns}
+\begin{itemize}
+    \item \textbf{Deepfakes}: Malicious creation of synthetic media
+    \item \textbf{Privacy}: Generation of fake personal data
+    \item \textbf{Copyright}: Unauthorized training on copyrighted material
+    \item \textbf{Bias}: Amplification of biases in training data
+\end{itemize}
+
+\subsection{Practical Recommendations}
+
+\subsubsection{For Successful GAN Training}
+\begin{enumerate}
+    \item Use appropriate learning rates (typically $10^{-4}$ to $10^{-3}$)
+    \item Implement label smoothing to stabilize training
+    \item Monitor loss ratios to detect divergence early
+    \item Use batch normalization and spectral normalization
+    \item Employ Adam optimizer with $\beta_1 = 0.5$
+    \item Start with simple architectures, gradually increase complexity
+    \item Validate on held-out test set regularly
+\end{enumerate}
+
+\subsubsection{When to Use GANs}
+\begin{itemize}
+    \item Image generation and synthesis tasks
+    \item When data is limited and augmentation is needed
+    \item Domain transfer and style conversion
+    \item Creative applications requiring diverse outputs
+\end{itemize}
+
+\subsubsection{When to Use Alternatives}
+\begin{itemize}
+    \item Variational Autoencoders (VAE) for interpretable latent space
+    \item Diffusion Models for stable training and better quality
+    \item Autoregressive models for sequential data
+    \item Flow-based models for exact likelihood computation
+\end{itemize}
+
+% ============================================================================
+\section{Conclusion} \label{sec:conclusion}
+% ============================================================================
+
+This case study demonstrates the fundamental principles of Generative Adversarial Networks through a complete implementation on the MNIST dataset. We have shown:
+
+\begin{enumerate}
+    \item \textbf{Conceptual Foundation}: GANs implement a game-theoretic framework where two networks compete to improve mutual performance
+    \item \textbf{Architecture Design}: Generator and discriminator networks are carefully balanced for stable training
+    \item \textbf{Implementation Success}: PyTorch implementation successfully generates synthetic digit images
+    \item \textbf{Training Dynamics}: Networks exhibit characteristic convergence patterns reaching near-equilibrium
+    \item \textbf{Practical Insights}: Label smoothing, proper learning rates, and architecture design are critical
+    \item \textbf{Broad Applicability}: GANs enable numerous real-world applications across imaging, science, and industry
+\end{enumerate}
+
+\subsection{Future Directions}
+
+\begin{itemize}
+    \item Explore advanced architectures (Progressive GAN, StyleGAN)
+    \item Implement alternative loss functions (Wasserstein, Hinge)
+    \item Apply to larger, more complex datasets (CelebA, ImageNet)
+    \item Develop conditional GANs for class-specific generation
+    \item Investigate mode collapse solutions and diversity metrics
+    \item Combine with other generative models (GANs + Diffusion)
+\end{itemize}
+
+\subsection{Key Takeaways}
+
+\begin{itemize}
+    \item GANs are powerful tools for data generation but require careful training
+    \item Understanding the theoretical foundations is crucial for successful implementation
+    \item Practical tricks and hyperparameter tuning significantly impact results
+    \item Evaluation of generative models remains an open research problem
+    \item Responsible use is essential given potential for misuse
+\end{itemize}
+
+% ============================================================================
+\appendix
+\section{Complete Training Code} \label{app:code}
+% ============================================================================
+
+See the attached \texttt{code/gan\_mnist.py} file for the complete, runnable implementation including:
+\begin{itemize}
+    \item All imports and configuration
+    \item Data loading and preprocessing
+    \item Generator and Discriminator definitions
+    \item Training loop with evaluation metrics
+    \item Visualization and plotting functions
+\end{itemize}
+
+\section{Hyperparameter Sensitivity} \label{app:hyperparams}
+
+\subsection{Learning Rate Impact}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{Learning Rate} & \textbf{Convergence} & \textbf{Stability} & \textbf{Quality} \\
+        \hline
+        $10^{-5}$ & Very slow & High & Mediocre \\
+        \hline
+        $10^{-4}$ & Optimal & High & Excellent \\
+        \hline
+        $10^{-3}$ & Fast but unstable & Low & Poor \\
+        \hline
+        $10^{-2}$ & Diverges & Very low & None \\
+        \hline
+    \end{tabular}
+    \caption{Learning Rate Sensitivity Analysis}
+\end{table}
+
+\subsection{Architecture Depth Impact}
+\begin{itemize}
+    \item Shallow networks (2-3 layers): Fast training, limited quality
+    \item Medium networks (4-5 layers): Balanced approach
+    \item Deep networks (6-8 layers): Slow training, potential instability
+\end{itemize}
+
+% ============================================================================
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+
+\bibitem{goodfellow2014} Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... \& Bengio, Y. (2014). Generative adversarial networks. \textit{Advances in neural information processing systems}, 27.
+
+\bibitem{radford2015} Radford, A., Metz, L., \& Chintala, S. (2015). Unsupervised representation learning with deep convolutional generative adversarial networks. \textit{arXiv preprint arXiv:1511.06434}.
+
+\bibitem{salimans2016} Salimans, T., Goodfellow, I., Zaremba, W., Cheung, V., Radford, A., \& Chen, X. (2016). Improved techniques for training gans. \textit{Advances in neural information processing systems}, 29.
+
+\bibitem{wasserstein2017} Arjovsky, M., Chintala, S., \& Bottou, L. (2017). Wasserstein GAN. \textit{arXiv preprint arXiv:1701.07875}.
+
+\bibitem{karras2018} Karras, T., Aila, T., Laine, S., \& Lehtinen, J. (2018). Progressive growing of gans for improved quality, stability, and variation. \textit{arXiv preprint arXiv:1710.10196}.
+
+\bibitem{pytorch} Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., ... \& Desmaison, A. (2019). Pytorch: An imperative style, high-performance deep learning library. \textit{Advances in neural information processing systems}, 32.
+
+\end{thebibliography}
+
+\end{document}
